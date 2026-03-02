@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MATH KVADRAT 2026 - FINAL STABLE SYSTEM</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg: #0f111a; --card: #1a1c2c; --accent: #00d2ff;
+            --text: #ffffff; --green: #2ecc71; --red: #e74c3c; --border: #333852;
+        }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; min-height: 100vh; }
+        .container { background: var(--card); padding: 25px 20px; border-radius: 15px; border: 1px solid var(--border); width: 100%; max-width: 1100px; position: relative; margin-bottom: 20px; box-sizing: border-box; }
+        .badge { position: absolute; top: -12px; left: 20px; background: var(--accent); color: #000; padding: 4px 15px; border-radius: 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+        input, select, button { width: 100%; height: 45px; border-radius: 10px; border: 1px solid var(--border); background: #0a0b14; color: white; font-size: 15px; margin-bottom: 10px; padding: 0 10px; box-sizing: border-box; }
+        button { cursor: pointer; font-weight: 800; border: none; background: var(--accent); color: #000; }
+        
+        #answers-queue { max-height: 500px; overflow-y: auto; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid var(--border); }
+        #answers-queue::-webkit-scrollbar { width: 8px; }
+        #answers-queue::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .notif-card { background: #24273d; padding: 15px; margin-bottom: 10px; border-radius: 10px; border-left: 5px solid var(--accent); display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .notif-card.checked { opacity: 0.3 !important; filter: grayscale(0.8); background: #111 !important; border-left-color: #444 !important; }
+        
+        #status-banner { display: none; padding: 15px; text-align: center; font-weight: 900; border-radius: 10px; margin-bottom: 15px; font-size: 18px; text-transform: uppercase; }
+        .table-holder { width: 100%; background: white; border-radius: 10px; overflow-x: auto; margin-top: 10px; margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; color: #000; text-align: center; min-width: 800px; }
+        th, td { border: 1px solid #ccc; padding: 8px; font-size: 12px; font-weight: 700; }
+        th { background: #1a1c2c; color: white; }
+        .bg-ok { background: var(--green) !important; color: white; }
+        .bg-fail { background: var(--red) !important; color: white; }
+        .screen { display: none; width: 100%; max-width: 1100px; }
+        #winners-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 1000; padding: 60px 20px; overflow-y: auto; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-screen" class="container" style="display: block; max-width: 350px; margin-top: 10vh; text-align: center;">
+        <h2 style="color: var(--accent);">MATH KVADRAT</h2>
+        <input type="text" id="login-field" placeholder="Логин">
+        <input type="password" id="pass-field" placeholder="Пароль">
+        <button onclick="tryLogin()">ВОЙТИ</button>
+    </div>
+
+    <div id="volunteer-screen" class="screen container">
+        <div class="badge" id="vol-badge">Волонтер</div>
+        <select id="vol-select-team"></select>
+        <select id="vol-select-task"></select>
+        <input type="text" id="vol-ans" placeholder="ОТВЕТ КОМАНДЫ">
+        <button onclick="sendSubmission()" style="background: var(--green); margin-bottom: 5px;">ОТПРАВИТЬ ЖЮРИ</button>
+        <button onclick="document.getElementById('vol-ans').value = ''" style="background: var(--red); color: white;">СБРОСИТЬ ОТВЕТ</button>
+    </div>
+
+    <div id="admin-screen" class="screen container">
+        <div class="badge">Админ</div>
+        <div style="background: #24273d; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid var(--red);">
+            <h4 style="margin: 0 0 10px 0; color: var(--red);">ШТРАФЫ</h4>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="penalty-team" placeholder="4.1">
+                <input type="number" id="penalty-val" placeholder="Баллы">
+                <button onclick="applyPenalty()" style="background: var(--red); color: white; width: 80px;">ОК</button>
+            </div>
+        </div>
+        <label>Кол-во Жюри:</label>
+        <input type="number" id="setup-teachers">
+        <button onclick="saveAdminConfig()">💾 СОХРАНИТЬ</button>
+        <button style="background: #f1c40f;" onclick="showWinners()">🏆 ИТОГИ</button>
+        <button style="background: var(--red); color: white; margin-top: 20px;" onclick="fullReset()">ОБНУЛИТЬ ВСЁ</button>
+    </div>
+
+    <div id="teacher-screen" class="screen">
+        <div class="container">
+            <div class="badge" id="teacher-badge">Жюри</div>
+            <div id="status-banner"></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <select id="select-team" onchange="refreshStatusBanner()"></select>
+                <select id="select-task" onchange="refreshStatusBanner()"></select>
+            </div>
+            <input type="text" id="view-ans" readonly style="text-align:center; font-weight:900; font-size: 28px; color: var(--accent); background:#000;">
+            <div style="display: flex; gap: 10px;">
+                <button style="background: var(--green); color: white; flex: 1;" onclick="setResult('ok')">ВЕРНО</button>
+                <button style="background: var(--red); color: white; flex: 1;" onclick="setResult('fail')">ОШИБКА</button>
+            </div>
+        </div>
+        <div class="container">
+            <div class="badge">Очередь</div>
+            <div id="answers-queue"></div>
+        </div>
+    </div>
+
+    <div id="room-screen" class="screen">
+        <h2 id="room-title" style="text-align: center; color: var(--accent);">РЕЗУЛЬТАТЫ</h2>
+        <div id="tables-container"></div>
+    </div>
+
+    <div id="winners-screen">
+        <button onclick="this.parentElement.style.display='none'" style="background:var(--red); color:#fff; width: auto; padding: 10px 20px;">ЗАКРЫТЬ</button>
+        <div id="winners-container"></div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBXpwbVJMm8oPTxNIrci8VDaMju7QfBByw",
+            authDomain: "matholymp-b5c35.firebaseapp.com",
+            databaseURL: "https://matholymp-b5c35-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "matholymp-b5c35",
+            storageBucket: "matholymp-b5c35.firebasestorage.app",
+            messagingSenderId: "14249624634",
+            appId: "1:14249624634:web:2164cb56f3e11fd785a103",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const ROOMS = {
+            1: {cl: 4, teams: ["4.1", "4.2", "4.3"]}, 2: {cl: 4, teams: ["4.4", "4.10"]}, 3: {cl: 4, teams: ["4.5", "4.11"]},
+            4: {cl: 4, teams: ["4.6", "4.7"]}, 5: {cl: 4, teams: ["4.9", "4.8"]}, 6: {cl: 5, teams: ["5.1", "5.2"]},
+            7: {cl: 5, teams: ["5.3", "5.9"]}, 8: {cl: 5, teams: ["5.4", "5.10"]}, 9: {cl: 5, teams: ["5.5", "5.6"]},
+            10: {cl: 5, teams: ["5.7", "5.8"]}, 11: {cl: 5, teams: ["5.11", "5.12"]}, 12: {cl: 5, teams: ["5.13", "5.14"]},
+            13: {cl: 6, teams: ["6.1", "6.3", "6.2"]}, 14: {cl: 6, teams: ["6.4", "6.5"]}, 15: {cl: 6, teams: ["6.6", "6.7"]},
+            16: {cl: 6, teams: ["6.8", "6.9"]}, 17: {cl: 6, teams: ["6.10", "6.11"]}, 18: {cl: 6, teams: ["6.12", "6.13"]},
+            19: {cl: 6, teams: ["6.14", "6.15"]}, 20: {cl: 7, teams: ["7.1", "7.2", "7.3"]}, 21: {cl: 7, teams: ["7.4", "7.5", "7.12"]},
+            22: {cl: 7, teams: ["7.6", "7.7"]}, 23: {cl: 7, teams: ["7.8", "7.9"]}, 24: {cl: 7, teams: ["7.10", "7.11"]},
+            25: {cl: 8, teams: ["8.1", "8.2"]}, 26: {cl: 8, teams: ["8.4", "8.7"]}, 27: {cl: 8, teams: ["8.5", "8.6"]}
+        };
+
+        let MASTER_LIST = [];
+        Object.values(ROOMS).forEach(r => r.teams.forEach(t => { if(!MASTER_LIST.includes(t)) MASTER_LIST.push(t); }));
+        MASTER_LIST.sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+
+        let appConfig = { teachersCount: 1 };
+        let scores = {}, penalties = {}, currentUserNum = null, lastSubs = {};
+
+        db.ref('config').on('value', s => { if(s.val()) appConfig = s.val(); });
+        db.ref('scores').on('value', s => { 
+            scores = s.val() || {}; 
+            refreshStatusBanner(); 
+            if(currentUserNum && document.getElementById('teacher-screen').style.display === 'block') updateQueue(); 
+        });
+        db.ref('penalties').on('value', s => { penalties = s.val() || {}; });
+
+        function tryLogin() {
+            const l = document.getElementById('login-field').value.trim().toLowerCase();
+            const p = document.getElementById('pass-field').value.trim();
+            const show = (id) => { document.querySelectorAll('.screen').forEach(s=>s.style.display='none'); document.getElementById('auth-screen').style.display='none'; document.getElementById(id).style.display='block'; };
+            
+            if(l === 'admin' && p === 'admin2026') { show('admin-screen'); return; }
+            if(l === 'hall') { show('room-screen'); document.getElementById('room-title').innerText="ОБЩЕЕ ТАБЛО"; initHall(); return; }
+            if(l.startsWith('vol') && p === 'VSF14you') {
+                currentUserNum = parseInt(l.replace('vol',''));
+                if(!ROOMS[currentUserNum]) return alert("Ошибка: комната не найдена");
+                show('volunteer-screen'); setupVolunteerDropdowns(currentUserNum); return;
+            }
+            if(l.startsWith('teacher') && p === 'VSF14you') { 
+                currentUserNum = parseInt(l.replace('teacher',''));
+                show('teacher-screen'); setupTeacherDropdowns(); startQueueListener(); return; 
+            }
+            if(l.startsWith('room') && p === 'room2026') {
+                const n = parseInt(l.replace('room',''));
+                if(!ROOMS[n]) return alert("Ошибка: комната не найдена");
+                show('room-screen'); document.getElementById('room-title').innerText=`КОМНАТА ${n}`; initRoom(n); return;
+            }
+            alert("Ошибка входа!");
+        }
+
+        function setupVolunteerDropdowns(roomIdx) {
+            const ts = document.getElementById('vol-select-team'), qs = document.getElementById('vol-select-task');
+            ts.innerHTML = ""; qs.innerHTML = "";
+            ROOMS[roomIdx].teams.forEach(t => ts.innerHTML += `<option value="${t}">${t}</option>`);
+            for(let i=1; i<=16; i++) qs.innerHTML += `<option value="${i}">Задача ${i}</option>`;
+        }
+
+        function sendSubmission() {
+            const t = document.getElementById('vol-select-team').value, q = document.getElementById('vol-select-task').value, a = document.getElementById('vol-ans').value;
+            if(!a) return alert("Введите ответ!");
+            db.ref('submissions').push({ t, q, a, ts: Date.now() });
+            document.getElementById('vol-ans').value = "";
+            alert("Отправлено!");
+        }
+
+        function getTeacherAssignment(tNum) {
+            const K = parseInt(appConfig.teachersCount) || 1;
+            const N = MASTER_LIST.length;
+            const base = Math.floor(N/K), extra = N%K;
+            let start = 0;
+            for(let i=1; i<tNum; i++) start += (i<=extra)?base+1:base;
+            return MASTER_LIST.slice(start, start + ((tNum<=extra)?base+1:base));
+        }
+
+        function setupTeacherDropdowns() {
+            const ts = document.getElementById('select-team'), qs = document.getElementById('select-task');
+            ts.innerHTML = ""; qs.innerHTML = "";
+            getTeacherAssignment(currentUserNum).forEach(id => ts.innerHTML += `<option value="${id}">${id}</option>`);
+            for(let i=1; i<=16; i++) qs.innerHTML += `<option value="${i}">Задача ${i}</option>`;
+        }
+
+        function startQueueListener() { db.ref('submissions').on('value', snap => { lastSubs = snap.val() || {}; updateQueue(); }); }
+
+        function updateQueue() {
+            const qBox = document.getElementById('answers-queue'); if(!qBox) return;
+            qBox.innerHTML = "";
+            const mine = getTeacherAssignment(currentUserNum);
+            const items = Object.entries(lastSubs).map(([id, d]) => ({id, ...d})).filter(item => mine.includes(String(item.t)));
+            
+            const pending = [], checked = [];
+            items.forEach(item => {
+                const s = scores[`t${item.t.replace('.','-')}_q${item.q}`];
+                if(s) checked.unshift(item); else pending.unshift(item);
+            });
+
+            [...pending, ...checked].forEach(item => {
+                const s = scores[`t${item.t.replace('.','-')}_q${item.q}`];
+                let div = document.createElement('div');
+                div.className = `notif-card ${s?'checked':''}`;
+                div.innerHTML = `<div><b>${item.t} | Зад. ${item.q}</b><br><small>${s?'ПРОВЕРЕНО':'ЖДЕТ'}</small></div><b style="font-size:24px;">${item.a}</b>`;
+                div.onclick = () => { 
+                    document.getElementById('select-team').value=item.t; 
+                    document.getElementById('select-task').value=item.q; 
+                    document.getElementById('view-ans').value=item.a; 
+                    refreshStatusBanner(); 
+                };
+                qBox.appendChild(div);
+            });
+        }
+
+        function calcTotal(tid) {
+            let base = 0, solved = [];
+            const safeId = tid.replace('.','-');
+            for(let q=1; q<=16; q++) if(scores[`t${safeId}_q${q}`]==='ok') { base += ((((q-1)%4)+1)*10); solved[q]=true; }
+            let bonus = 0;
+            for(let r=0; r<4; r++) if(solved[r*4+1] && solved[r*4+2] && solved[r*4+3] && solved[r*4+4]) bonus += 40;
+            for(let c=1; c<=4; c++) if(solved[c] && solved[c+4] && solved[c+8] && solved[c+12]) bonus += (c*10);
+            return base + bonus - (penalties[`t${safeId}`] || 0);
+        }
+
+        function renderTbl(title, list) {
+            let h = `<h3>${title}</h3><div class="table-holder"><table><tr><th>Команда</th>${Array.from({length:16},(_,i)=>`<th>${i+1}</th>`).join('')}<th>Σ</th></tr>`;
+            list.forEach(tid => {
+                let r = `<td><b>${tid}</b></td>`;
+                const safeId = tid.replace('.','-');
+                for(let q=1; q<=16; q++) { 
+                    let s = scores[`t${safeId}_q${q}`]; 
+                    r += `<td class="${s==='ok'?'bg-ok':(s==='fail'?'bg-fail':'')}"></td>`; 
+                }
+                h += `<tr>${r}<td><b>${calcTotal(tid)}</b></td></tr>`;
+            });
+            return h + `</table></div>`;
+        }
+
+        function initHall() {
+            db.ref('scores').on('value', () => {
+                const c = document.getElementById('tables-container'); c.innerHTML = "";
+                [4, 5, 6, 7, 8].forEach(g => {
+                    const l = MASTER_LIST.filter(t => t.startsWith(g+"."));
+                    if(l.length) c.innerHTML += renderTbl(`Класс ${g}`, l);
+                });
+            });
+        }
+
+        function initRoom(idx) {
+            db.ref('scores').on('value', () => {
+                document.getElementById('tables-container').innerHTML = renderTbl(`Комната ${idx}`, ROOMS[idx].teams);
+            });
+        }
+
+        function showWinners() {
+            const c = document.getElementById('winners-container'); c.innerHTML = "";
+            document.getElementById('winners-screen').style.display='block';
+            [4, 5, 6, 7, 8].forEach(g => {
+                let l = MASTER_LIST.filter(t => t.startsWith(g+".")).map(tid => ({id: tid, s: calcTotal(tid)}));
+                l.sort((a,b) => b.s - a.s);
+                let h = `<div class="container"><h3>Класс ${g}</h3><div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">`;
+                ["🥇","🥈","🥉"].forEach((m,i) => { if(l[i]) h += `<div>${m} ${l[i].id}<br><b>${l[i].s}</b></div>`; });
+                c.innerHTML += h + "</div></div>";
+            });
+        }
+
+        function setResult(v) { 
+            const t = document.getElementById('select-team').value, q = document.getElementById('select-task').value;
+            if(t && q) {
+                db.ref(`scores/t${t.replace('.','-')}_q${q}`).set(v); 
+            }
+        }
+
+        function refreshStatusBanner() {
+            const t = document.getElementById('select-team').value, q = document.getElementById('select-task').value, b = document.getElementById('status-banner');
+            if(!b || !t || !q) return;
+            const s = scores[`t${t.replace('.','-')}_q${q}`];
+            if(s) { 
+                b.style.display="block"; 
+                b.style.background=s==='ok'?'var(--green)':'var(--red)'; 
+                b.innerText=s==='ok'?"ВЕРНО ✅":"ОШИБКА ❌"; 
+            } else {
+                b.style.display="none";
+            }
+        }
+
+        function applyPenalty() {
+            const t = document.getElementById('penalty-team').value, v = document.getElementById('penalty-val').value;
+            if(t && v) db.ref(`penalties/t${t.replace('.','-')}`).set(parseInt(v));
+        }
+
+        function saveAdminConfig() { db.ref('config/teachersCount').set(document.getElementById('setup-teachers').value); alert("Сохранено"); }
+        
+        function fullReset() { 
+            const masterPass = prompt("ВНИМАНИЕ! Введите мастер-пароль для обнуления всех результатов:");
+            if(masterPass === "MASTER2026") { // Измените пароль на свой
+                if(confirm("ВЫ УВЕРЕНЫ? ДАННЫЕ БУДУТ УДАЛЕНЫ БЕЗВОЗВРАТНО!")) { 
+                    db.ref('scores').remove(); 
+                    db.ref('submissions').remove(); 
+                    db.ref('penalties').remove(); 
+                    alert("Все данные обнулены.");
+                } 
+            } else {
+                alert("Неверный пароль!");
+            }
+        }
+    </script>
+</body>
+</html>
