@@ -1,17 +1,17 @@
-// Ключ для Gemini API
-const GEMINI_API_KEY = "AIzaSyCAKP0Id8VBaQASZpj3SCI0TWFnbFJ9Ssc";
-
-// Конфигурация Firebase
+// Конфигурация Firebase и Gemini API
 const firebaseConfig = {
-    apiKey: "AIzaSyBXpwbVJMm8oPTxNIrci8VDaMju7QfBByw",
-    authDomain: "matholymp-b5c35.firebaseapp.com",
-    databaseURL: "https://matholymp-b5c35-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "matholymp-b5c35",
-    storageBucket: "matholymp-b5c35.firebasestorage.app",
-    messagingSenderId: "14249624634",
-    appId: "1:14249624634:web:2164cb56f3e11fd785a103",
+    apiKey: "AIzaSyCAKP0Id8VBaQASZpj3SCI0TWFnbFJ9Ssc",
+    authDomain: "math-kvadrat-2026.firebaseapp.com",
+    databaseURL: "https://math-kvadrat-2026-default-rtdb.firebaseio.com",
+    projectId: "math-kvadrat-2026",
+    storageBucket: "math-kvadrat-2026.appspot.com",
+    messagingSenderId: "123456789012",
+    appId: "1:123456789012:web:abcdef1234567890"
 };
 
-// Инициализация
+// Инициализация Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// Ключ Gemini API
+const GEMINI_API_KEY = "AIzaSyCAKP0Id8VBaQASZpj3SCI0TWFnbFJ9Ssc";

@@ -4,94 +4,132 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MATH KVADRAT 2026</title>
-    
-    <!-- Внешние библиотеки -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
-    
-    <!-- Наш файл стилей -->
     <link rel="stylesheet" href="style.css">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
 
-    <!-- ЭКРАН АВТОРИЗАЦИИ -->
-    <div id="auth-screen" class="container" style="display: block; max-width: 350px; margin-top: 10vh; text-align: center;">
-        <h2 style="color: var(--accent);">MATH KVADRAT</h2>
-        <input type="text" id="login-field" placeholder="Логин">
-        <input type="password" id="pass-field" placeholder="Пароль">
-        <button onclick="tryLogin()">ВОЙТИ</button>
+    <!-- Экран авторизации -->
+    <div id="auth-screen" class="screen">
+        <div class="auth-card">
+            <h2>MATH KVADRAT 2026</h2>
+            <p>Вход в систему</p>
+            <input type="text" id="login-field" placeholder="Логин (admin / vol1 / teacher1 / room1 / hall)">
+            <input type="password" id="pass-field" placeholder="Пароль">
+            <button onclick="tryLogin()">Войти</button>
+        </div>
     </div>
 
-    <!-- ЭКРАН ВОЛОНТЕРА -->
-    <div id="volunteer-screen" class="screen container">
-        <div class="badge" id="vol-badge">Волонтер</div>
-        <select id="vol-select-team"></select>
-        <select id="vol-select-task"></select>
-        <input type="text" id="vol-ans" placeholder="ОТВЕТ КОМАНДЫ">
-        <button id="send-btn" onclick="sendSubmission()" style="background: var(--green); margin-bottom: 5px;">ОТПРАВИТЬ ЖЮРИ</button>
-        <button onclick="document.getElementById('vol-ans').value = ''" style="background: var(--red); color: white;">СБРОСИТЬ ОТВЕТ</button>
+    <!-- Экран волонтёра -->
+    <div id="volunteer-screen" class="screen" style="display: none;">
+        <div class="container">
+            <h2>Ввод ответов (Волонтёр)</h2>
+            <label>Команда:</label>
+            <select id="vol-select-team"></select>
+
+            <label>Задача:</label>
+            <select id="vol-select-task"></select>
+
+            <label>Ответ команды:</label>
+            <input type="text" id="vol-ans" placeholder="Введите ответ...">
+
+            <button id="send-btn" onclick="sendSubmission()">ОТПРАВИТЬ ЖЮРИ</button>
+        </div>
     </div>
 
-    <!-- ЭКРАН АДМИНА -->
-    <div id="admin-screen" class="screen container">
-        <div class="badge">Админ</div>
-        <div style="background: #24273d; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid var(--red);">
-            <h4 style="margin: 0 0 10px 0; color: var(--red);">ШТРАФЫ</h4>
-            <div style="display: flex; gap: 10px;">
-                <input type="text" id="penalty-team" placeholder="4.1">
-                <input type="number" id="penalty-val" placeholder="Баллы">
-                <button onclick="applyPenalty()" style="background: var(--red); color: white; width: 80px;">ОК</button>
+    <!-- Экран учителя / жюри -->
+    <div id="teacher-screen" class="screen" style="display: none;">
+        <div class="teacher-layout">
+            <div class="main-panel">
+                <h2>Панель проверки жюри</h2>
+                
+                <div class="form-group">
+                    <label>Команда:</label>
+                    <select id="select-team" onchange="refreshStatusBanner()"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Задача:</label>
+                    <select id="select-task" onchange="refreshStatusBanner()"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Ответ участников:</label>
+                    <input type="text" id="view-ans" readonly placeholder="Выберите из очереди...">
+                </div>
+
+                <!-- Подсказка ИИ -->
+                <div id="ai-suggestion-box" class="ai-card" style="display: none;">
+                    <h4>🤖 Подсказка ИИ (Gemini):</h4>
+                    <p id="ai-verdict-text" style="font-weight: bold;"></p>
+                    <p id="ai-reason-text" style="font-size: 14px; opacity: 0.9;"></p>
+                </div>
+
+                <!-- Баннер текущего статуса -->
+                <div id="status-banner" class="status-banner" style="display: none;"></div>
+
+                <div class="action-btns">
+                    <button class="btn-ok" onclick="setResult('ok')">ВЕРНО ✅</button>
+                    <button class="btn-fail" onclick="setResult('fail')">ОШИБКА ❌</button>
+                </div>
+            </div>
+
+            <!-- Очередь ответов -->
+            <div class="sidebar">
+                <h3>Очередь ответов</h3>
+                <div id="answers-queue"></div>
             </div>
         </div>
-        <label>Кол-во Жюри:</label>
-        <input type="number" id="setup-teachers">
-        <button onclick="saveAdminConfig()">💾 СОХРАНИТЬ</button>
-        <button style="background: #f1c40f;" onclick="showWinners()">🏆 ИТОГИ</button>
-        <button style="background: var(--red); color: white; margin-top: 20px;" onclick="fullReset()">ОБНУЛИТЬ ВСЁ</button>
     </div>
 
-    <!-- ЭКРАН ЖЮРИ -->
-    <div id="teacher-screen" class="screen">
+    <!-- Экран комнат и общего табло -->
+    <div id="room-screen" class="screen" style="display: none;">
+        <div class="container wide">
+            <h2 id="room-title">ТАБЛО</h2>
+            <div id="tables-container"></div>
+        </div>
+    </div>
+
+    <!-- Экран победителей -->
+    <div id="winners-screen" class="screen" style="display: none;">
+        <div class="container wide">
+            <h2>🏆 Победители олимпиады</h2>
+            <div id="winners-container"></div>
+        </div>
+    </div>
+
+    <!-- Админ-панель -->
+    <div id="admin-screen" class="screen" style="display: none;">
         <div class="container">
-            <div class="badge" id="teacher-badge">Жюри</div>
-            <div id="status-banner"></div>
+            <h2>Администрирование</h2>
             
-            <div id="ai-suggestion-box" class="ai-banner">
-                <span class="ai-badge">ПОДСКАЗКА ИИ (GEMINI)</span>
-                <div id="ai-verdict-text" style="font-weight: 700; font-size: 14px; margin-bottom: 4px;"></div>
-                <div id="ai-reason-text" style="font-size: 12px; color: #a0a5c0;"></div>
+            <div class="admin-block">
+                <label>Количество учителей:</label>
+                <input type="number" id="setup-teachers" min="1" max="10" value="1">
+                <button onclick="saveAdminConfig()">Сохранить настройки</button>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <select id="select-team" onchange="refreshStatusBanner()"></select>
-                <select id="select-task" onchange="refreshStatusBanner()"></select>
+            <hr>
+
+            <div class="admin-block">
+                <h3>Штрафные баллы</h3>
+                <input type="text" id="penalty-team" placeholder="Команда (напр. 4.1)">
+                <input type="number" id="penalty-val" placeholder="Баллы">
+                <button onclick="applyPenalty()">Применить штраф</button>
             </div>
-            <input type="text" id="view-ans" readonly style="text-align:center; font-weight:900; font-size: 28px; color: var(--accent); background:#000;">
-            <div style="display: flex; gap: 10px;">
-                <button style="background: var(--green); color: white; flex: 1;" onclick="setResult('ok')">ВЕРНО</button>
-                <button style="background: var(--red); color: white; flex: 1;" onclick="setResult('fail')">ОШИБКА</button>
+
+            <hr>
+
+            <div class="admin-block">
+                <button onclick="showWinners()" style="background: var(--yellow); color: #000;">Показать победителей</button>
+                <button onclick="fullReset()" style="background: var(--red); margin-top: 15px;">⚠️ ПОЛНЫЙ СБРОС (MASTER RESET)</button>
             </div>
         </div>
-        <div class="container">
-            <div class="badge">Очередь</div>
-            <div id="answers-queue"></div>
-        </div>
     </div>
 
-    <!-- ЭКРАН ТАБЛО (КОМНАТА / ОБЩЕЕ) -->
-    <div id="room-screen" class="screen">
-        <h2 id="room-title" style="text-align: center; color: var(--accent);">РЕЗУЛЬТАТЫ</h2>
-        <div id="tables-container"></div>
-    </div>
-
-    <!-- ОКНО ПОБЕДИТЕЛЕЙ -->
-    <div id="winners-screen">
-        <button onclick="this.parentElement.style.display='none'" style="background:var(--red); color:#fff; width: auto; padding: 10px 20px;">ЗАКРЫТЬ</button>
-        <div id="winners-container"></div>
-    </div>
-
-    <!-- Подключение скриптов -->
     <script src="config.js"></script>
     <script src="app.js"></script>
 </body>
