@@ -12,8 +12,8 @@
 </head>
 <body>
 
-    <!-- Экран авторизации -->
-    <div id="auth-screen" class="screen">
+    <!-- Экран авторизации (по умолчанию открыт) -->
+    <div id="auth-screen" class="screen" style="display: block;">
         <div class="auth-card">
             <h2>MATH KVADRAT 2026</h2>
             <p>Вход в систему</p>
@@ -24,9 +24,11 @@
     </div>
 
     <!-- Экран волонтёра -->
-    <div id="volunteer-screen" class="screen" style="display: none;">
+    <div id="volunteer-screen" class="screen">
         <div class="container">
-            <h2>Ввод ответов (Волонтёр)</h2>
+            <div class="badge">Волонтёр</div>
+            <h2>Ввод ответов</h2>
+            
             <label>Команда:</label>
             <select id="vol-select-team"></select>
 
@@ -41,35 +43,30 @@
     </div>
 
     <!-- Экран учителя / жюри -->
-    <div id="teacher-screen" class="screen" style="display: none;">
+    <div id="teacher-screen" class="screen">
         <div class="teacher-layout">
             <div class="main-panel">
-                <h2>Панель проверки жюри</h2>
+                <div class="badge">Проверка</div>
+                <h2>Панель жюри</h2>
                 
-                <div class="form-group">
-                    <label>Команда:</label>
-                    <select id="select-team" onchange="refreshStatusBanner()"></select>
-                </div>
+                <label>Команда:</label>
+                <select id="select-team" onchange="refreshStatusBanner()"></select>
 
-                <div class="form-group">
-                    <label>Задача:</label>
-                    <select id="select-task" onchange="refreshStatusBanner()"></select>
-                </div>
+                <label>Задача:</label>
+                <select id="select-task" onchange="refreshStatusBanner()"></select>
 
-                <div class="form-group">
-                    <label>Ответ участников:</label>
-                    <input type="text" id="view-ans" readonly placeholder="Выберите из очереди...">
-                </div>
+                <label>Ответ участников:</label>
+                <input type="text" id="view-ans" readonly placeholder="Выберите из очереди...">
 
                 <!-- Подсказка ИИ -->
-                <div id="ai-suggestion-box" class="ai-card" style="display: none;">
-                    <h4>🤖 Подсказка ИИ (Gemini):</h4>
-                    <p id="ai-verdict-text" style="font-weight: bold;"></p>
-                    <p id="ai-reason-text" style="font-size: 14px; opacity: 0.9;"></p>
+                <div id="ai-suggestion-box" class="ai-banner" style="display: none;">
+                    <div class="ai-badge">🤖 Gemini AI</div>
+                    <p id="ai-verdict-text" style="font-weight: bold; margin: 5px 0;"></p>
+                    <p id="ai-reason-text" style="font-size: 13px; opacity: 0.8; margin: 0;"></p>
                 </div>
 
                 <!-- Баннер текущего статуса -->
-                <div id="status-banner" class="status-banner" style="display: none;"></div>
+                <div id="status-banner"></div>
 
                 <div class="action-btns">
                     <button class="btn-ok" onclick="setResult('ok')">ВЕРНО ✅</button>
@@ -86,7 +83,7 @@
     </div>
 
     <!-- Экран комнат и общего табло -->
-    <div id="room-screen" class="screen" style="display: none;">
+    <div id="room-screen" class="screen">
         <div class="container wide">
             <h2 id="room-title">ТАБЛО</h2>
             <div id="tables-container"></div>
@@ -94,7 +91,7 @@
     </div>
 
     <!-- Экран победителей -->
-    <div id="winners-screen" class="screen" style="display: none;">
+    <div id="winners-screen">
         <div class="container wide">
             <h2>🏆 Победители олимпиады</h2>
             <div id="winners-container"></div>
@@ -102,9 +99,10 @@
     </div>
 
     <!-- Админ-панель -->
-    <div id="admin-screen" class="screen" style="display: none;">
+    <div id="admin-screen" class="screen">
         <div class="container">
-            <h2>Администрирование</h2>
+            <div class="badge">Admin Panel</div>
+            <h2>Управление</h2>
             
             <div class="admin-block">
                 <label>Количество учителей:</label>
@@ -124,8 +122,8 @@
             <hr>
 
             <div class="admin-block">
-                <button onclick="showWinners()" style="background: var(--yellow); color: #000;">Показать победителей</button>
-                <button onclick="fullReset()" style="background: var(--red); margin-top: 15px;">⚠️ ПОЛНЫЙ СБРОС (MASTER RESET)</button>
+                <button onclick="showWinners()" style="background: #f59e0b; color: #000;">Показать победителей</button>
+                <button onclick="fullReset()" style="background: var(--red); margin-top: 15px; color: white;">⚠️ ПОЛНЫЙ СБРОС (MASTER RESET)</button>
             </div>
         </div>
     </div>

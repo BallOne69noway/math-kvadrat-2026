@@ -1,346 +1,360 @@
-// ==========================================
-// 1. КОНСТАНТЫ И ИНИЦИАЛИЗАЦИЯ ДАННЫХ
-// ==========================================
-const ROOMS = {
-    1: {cl: 4, teams: ["4.1", "4.2", "4.3"]}, 2: {cl: 4, teams: ["4.4", "4.10"]}, 3: {cl: 4, teams: ["4.5", "4.11"]},
-    4: {cl: 4, teams: ["4.6", "4.7"]}, 5: {cl: 4, teams: ["4.9", "4.8"]}, 6: {cl: 5, teams: ["5.1", "5.2"]},
-    7: {cl: 5, teams: ["5.3", "5.9"]}, 8: {cl: 5, teams: ["5.4", "5.10"]}, 9: {cl: 5, teams: ["5.5", "5.6"]},
-    10: {cl: 5, teams: ["5.7", "5.8"]}, 11: {cl: 5, teams: ["5.11", "5.12"]}, 12: {cl: 5, teams: ["5.13", "5.14"]},
-    13: {cl: 6, teams: ["6.1", "6.3", "6.2"]}, 14: {cl: 6, teams: ["6.4", "6.5"]}, 15: {cl: 6, teams: ["6.6", "6.7"]},
-    16: {cl: 6, teams: ["6.8", "6.9"]}, 17: {cl: 6, teams: ["6.10", "6.11"]}, 18: {cl: 6, teams: ["6.12", "6.13"]},
-    19: {cl: 6, teams: ["6.14", "6.15"]}, 20: {cl: 7, teams: ["7.1", "7.2", "7.3"]}, 21: {cl: 7, teams: ["7.4", "7.5", "7.12"]},
-    22: {cl: 7, teams: ["7.6", "7.7"]}, 23: {cl: 7, teams: ["7.8", "7.9"]}, 24: {cl: 7, teams: ["7.10", "7.11"]},
-    25: {cl: 8, teams: ["8.1", "8.2"]}, 26: {cl: 8, teams: ["8.4", "8.7"]}, 27: {cl: 8, teams: ["8.5", "8.6"]}
+let currentUser = null;
+let currentRole = null;
+let currentRoom = null;
+let appState = {
+    teams: {},
+    correctAnswers: {},
+    submissions: {},
+    config: { teacherCount: 1 },
+    penalties: {}
 };
 
-let MASTER_LIST = [];
-Object.values(ROOMS).forEach(r => r.teams.forEach(t => { if(!MASTER_LIST.includes(t)) MASTER_LIST.push(t); }));
-MASTER_LIST.sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
-
-let appConfig = { teachersCount: 1 };
-let scores = {}, penalties = {}, currentUserNum = null, lastSubs = {}, aiChecks = {};
-
-// ==========================================
-// 2. СЛУШАТЕЛИ FIREBASE (REALTIME DATABASE)
-// ==========================================
-db.ref('config').on('value', s => { if(s.val()) appConfig = s.val(); });
-
-db.ref('scores').on('value', s => { 
-    scores = s.val() || {}; 
-    refreshStatusBanner(); 
-    if(currentUserNum && document.getElementById('teacher-screen').style.display === 'block') updateQueue(); 
+// Инициализация при загрузке
+document.addEventListener("DOMContentLoaded", () => {
+    initApp();
 });
 
-db.ref('penalties').on('value', s => { penalties = s.val() || {}; });
+function initApp() {
+    db.ref().on("value", (snapshot) => {
+        const data = snapshot.val() || {};
+        appState.teams = data.teams || generateDefaultTeams();
+        appState.correctAnswers = data.correctAnswers || {};
+        appState.submissions = data.submissions || {};
+        appState.config = data.config || { teacherCount: 1 };
+        appState.penalties = data.penalties || {};
 
-db.ref('ai_checks').on('value', s => { 
-    aiChecks = s.val() || {}; 
-    refreshStatusBanner(); 
-});
+        if (currentRole === "teacher") {
+            updateTeacherUI();
+        } else if (currentRole === "room" || currentRole === "hall") {
+            renderTables();
+        } else if (currentRole === "volunteer") {
+            updateVolunteerOptions();
+        }
+    });
+}
 
-// ==========================================
-// 3. АВТОРИЗАЦИЯ И НАВИГАЦИЯ ПО ЭКРАНАМ
-// ==========================================
+function showScreen(screenId) {
+    document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
+    document.getElementById("winners-screen").style.display = "none";
+    const target = document.getElementById(screenId);
+    if (target) target.style.display = "block";
+}
+
+// Авторизация
 function tryLogin() {
-    const l = document.getElementById('login-field').value.trim().toLowerCase();
-    const p = document.getElementById('pass-field').value.trim();
-    const show = (id) => { 
-        document.querySelectorAll('.screen').forEach(s => s.style.display = 'none'); 
-        document.getElementById('auth-screen').style.display = 'none'; 
-        document.getElementById(id).style.display = 'block'; 
-    };
-    
-    if(l === 'admin' && p === 'admin2026') { show('admin-screen'); return; }
-    if(l === 'hall') { show('room-screen'); document.getElementById('room-title').innerText = "ОБЩЕЕ ТАБЛО"; initHall(); return; }
-    
-    if(l.startsWith('vol') && p === 'VSF14you') {
-        currentUserNum = parseInt(l.replace('vol',''));
-        if(!ROOMS[currentUserNum]) return alert("Ошибка: комната не найдена");
-        show('volunteer-screen'); setupVolunteerDropdowns(currentUserNum); return;
+    const login = document.getElementById("login-field").value.trim().toLowerCase();
+    const pass = document.getElementById("pass-field").value.trim();
+
+    if (login === "admin" && pass === "admin123") {
+        currentRole = "admin";
+        showScreen("admin-screen");
+    } else if (login.startsWith("vol") && pass === "vol123") {
+        currentRole = "volunteer";
+        currentUser = login;
+        showScreen("volunteer-screen");
+        updateVolunteerOptions();
+    } else if (login.startsWith("teacher") && pass === "teacher123") {
+        currentRole = "teacher";
+        currentUser = login;
+        showScreen("teacher-screen");
+        updateTeacherUI();
+    } else if (login.startsWith("room") && pass === "room123") {
+        currentRole = "room";
+        currentRoom = login.replace("room", "");
+        document.getElementById("room-title").innerText = `ТАБЛО — КАБИНЕТ ${currentRoom}`;
+        showScreen("room-screen");
+        renderTables();
+    } else if (login === "hall" && pass === "hall123") {
+        currentRole = "hall";
+        document.getElementById("room-title").innerText = "ОБЩЕЕ ТАБЛО ОЛИМПИАДЫ";
+        showScreen("room-screen");
+        renderTables();
+    } else {
+        alert("Неверный логин или пароль!");
     }
-    
-    if(l.startsWith('teacher') && p === 'VSF14you') { 
-        currentUserNum = parseInt(l.replace('teacher',''));
-        show('teacher-screen'); setupTeacherDropdowns(); startQueueListener(); return; 
-    }
-    
-    if(l.startsWith('room') && p === 'room2026') {
-        const n = parseInt(l.replace('room',''));
-        if(!ROOMS[n]) return alert("Ошибка: комната не найдена");
-        show('room-screen'); document.getElementById('room-title').innerText = `КОМНАТА ${n}`; initRoom(n); return;
-    }
-    
-    alert("Ошибка входа!");
 }
 
-// ==========================================
-// 4. ЛОГИКА ВОЛОНТЕРА И ИИ-ПРОВЕРКА (GEMINI)
-// ==========================================
-function setupVolunteerDropdowns(roomIdx) {
-    const ts = document.getElementById('vol-select-team'), qs = document.getElementById('vol-select-task');
-    ts.innerHTML = ""; qs.innerHTML = "";
-    ROOMS[roomIdx].teams.forEach(t => ts.innerHTML += `<option value="${t}">${t}</option>`);
-    for(let i=1; i<=16; i++) qs.innerHTML += `<option value="${i}">Задача ${i}</option>`;
+// Дефолтные команды (4 кабинета, по 8 команд)
+function generateDefaultTeams() {
+    const teams = {};
+    for (let r = 1; r <= 4; r++) {
+        for (let t = 1; t <= 8; t++) {
+            const teamId = `${r}.${t}`;
+            teams[teamId] = { room: r, name: `Команда ${teamId}` };
+        }
+    }
+    return teams;
 }
 
-async function verifyWithAI(team, taskNum, volunteerAnswer) {
-    const promptText = `
-    Ты — эксперт олимпиады "MATH KVADRAT".
-    Проверь ответ команды ${team} на задачу №${taskNum}.
-    Введенный ответ: "${volunteerAnswer}"
-
-    Верни СТРОГО JSON объект без Markdown:
-    {
-        "isCorrect": true/false,
-        "confidence": 0.95,
-        "reason": "Краткая причина вердикта на русском языке"
+// Опции для волонтёра
+function updateVolunteerOptions() {
+    const teamSelect = document.getElementById("vol-select-team");
+    const taskSelect = document.getElementById("vol-select-task");
+    
+    if (teamSelect.options.length === 0) {
+        Object.keys(appState.teams).forEach(id => {
+            const opt = document.createElement("option");
+            opt.value = id;
+            opt.innerText = `Команда ${id}`;
+            teamSelect.appendChild(opt);
+        });
     }
-    `;
+
+    if (taskSelect.options.length === 0) {
+        for (let i = 1; i <= 16; i++) {
+            const opt = document.createElement("option");
+            opt.value = i;
+            opt.innerText = `Задача ${i}`;
+            taskSelect.appendChild(opt);
+        }
+    }
+}
+
+// Отправка ответа волонтёром
+function sendSubmission() {
+    const team = document.getElementById("vol-select-team").value;
+    const task = document.getElementById("vol-select-task").value;
+    const ans = document.getElementById("vol-ans").value.trim();
+
+    if (!ans) return alert("Введите ответ!");
+
+    const subKey = `${team}_${task}`;
+    db.ref(`submissions/${subKey}`).set({
+        team: team,
+        task: task,
+        answer: ans,
+        status: "pending",
+        timestamp: Date.now()
+    }).then(() => {
+        document.getElementById("vol-ans").value = "";
+        alert("Ответ отправлен жюри!");
+    });
+}
+
+// Интерфейс жюри
+function updateTeacherUI() {
+    const teamSelect = document.getElementById("select-team");
+    const taskSelect = document.getElementById("select-task");
+
+    if (teamSelect.options.length === 0) {
+        Object.keys(appState.teams).forEach(id => {
+            const opt = document.createElement("option");
+            opt.value = id;
+            opt.innerText = `Команда ${id}`;
+            teamSelect.appendChild(opt);
+        });
+    }
+
+    if (taskSelect.options.length === 0) {
+        for (let i = 1; i <= 16; i++) {
+            const opt = document.createElement("option");
+            opt.value = i;
+            opt.innerText = `Задача ${i}`;
+            taskSelect.appendChild(opt);
+        }
+    }
+
+    renderQueue();
+    refreshStatusBanner();
+}
+
+// Очередь ответов
+function renderQueue() {
+    const container = document.getElementById("answers-queue");
+    container.innerHTML = "";
+
+    const list = Object.values(appState.submissions).sort((a, b) => b.timestamp - a.timestamp);
+
+    list.forEach(sub => {
+        const item = document.createElement("div");
+        item.className = `notif-card ${sub.status !== 'pending' ? 'checked' : ''}`;
+        item.innerHTML = `
+            <div>
+                <strong>Команда ${sub.team}</strong> (Зад. ${sub.task})
+                <br><small>Ответ: ${sub.answer}</small>
+            </div>
+            <span>${sub.status === 'ok' ? '✅' : sub.status === 'fail' ? '❌' : '⏳'}</span>
+        `;
+        item.onclick = () => selectSubmissionForCheck(sub);
+        container.appendChild(item);
+    });
+}
+
+function selectSubmissionForCheck(sub) {
+    document.getElementById("select-team").value = sub.team;
+    document.getElementById("select-task").value = sub.task;
+    document.getElementById("view-ans").value = sub.answer;
+    refreshStatusBanner();
+    checkWithAI(sub.task, sub.answer);
+}
+
+function refreshStatusBanner() {
+    const team = document.getElementById("select-team").value;
+    const task = document.getElementById("select-task").value;
+    const banner = document.getElementById("status-banner");
+    
+    const subKey = `${team}_${task}`;
+    const sub = appState.submissions[subKey];
+
+    if (sub && sub.status !== "pending") {
+        banner.style.display = "block";
+        if (sub.status === "ok") {
+            banner.style.background = "var(--green)";
+            banner.innerText = "СТАТУС: ВЕРНО ✅";
+        } else {
+            banner.style.background = "var(--red)";
+            banner.innerText = "СТАТУС: ОШИБКА ❌";
+        }
+    } else {
+        banner.style.display = "none";
+    }
+}
+
+// Вердикт жюри
+function setResult(status) {
+    const team = document.getElementById("select-team").value;
+    const task = document.getElementById("select-task").value;
+    const ans = document.getElementById("view-ans").value;
+
+    const subKey = `${team}_${task}`;
+    db.ref(`submissions/${subKey}`).set({
+        team: team,
+        task: task,
+        answer: ans || "—",
+        status: status,
+        timestamp: Date.now()
+    });
+}
+
+// Интеграция с Gemini API
+async function checkWithAI(taskNum, userAns) {
+    const box = document.getElementById("ai-suggestion-box");
+    const verdictEl = document.getElementById("ai-verdict-text");
+    const reasonEl = document.getElementById("ai-reason-text");
+
+    box.style.display = "block";
+    verdictEl.innerText = "Анализируем ответ с Gemini AI...";
+    reasonEl.innerText = "";
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }]
+                contents: [{
+                    parts: [{
+                        text: `Ты помощник жюри на математической олимпиаде. Задача №${taskNum}. Ответ команды: "${userAns}". Дай краткую оценку: верный ли формат ответа и похож ли он на математический результат. Отвечай кратко в 2 предложения.`
+                    }]
+                }]
             })
         });
 
         const data = await response.json();
-        const rawText = data.candidates[0].content.parts[0].text.trim();
-        const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleanJson);
-    } catch (err) {
-        console.error("AI Error:", err);
-        return { isCorrect: false, confidence: 0, reason: "Ошибка соединения с ИИ-модулем" };
-    }
-}
-
-async function sendSubmission() {
-    const t = document.getElementById('vol-select-team').value;
-    const q = document.getElementById('vol-select-task').value;
-    const a = document.getElementById('vol-ans').value.trim();
-    if(!a) return alert("Введите ответ!");
-
-    const sendBtn = document.getElementById('send-btn');
-    sendBtn.disabled = true;
-    sendBtn.innerText = "АНАЛИЗ ИИ...";
-
-    const subRef = db.ref('submissions').push();
-    await subRef.set({ t, q, a, ts: Date.now() });
-
-    const aiRes = await verifyWithAI(t, q, a);
-    const safeId = t.replace('.', '-');
-
-    await db.ref(`ai_checks/t${safeId}_q${q}`).set({
-        aiVerdict: aiRes.isCorrect ? 'ok' : 'fail',
-        confidence: aiRes.confidence || 0,
-        reason: aiRes.reason || "",
-        timestamp: Date.now()
-    });
-
-    document.getElementById('vol-ans').value = "";
-    sendBtn.disabled = false;
-    sendBtn.innerText = "ОТПРАВИТЬ ЖЮРИ";
-    alert(`Отправлено! Точность ИИ: ${Math.round((aiRes.confidence || 0) * 100)}%`);
-}
-
-// ==========================================
-// 5. ЛОГИКА УЧИТЕЛЯ / ЖЮРИ И ОЧЕРЕДИ
-// ==========================================
-function getTeacherAssignment(tNum) {
-    const K = parseInt(appConfig.teachersCount) || 1;
-    const N = MASTER_LIST.length;
-    const base = Math.floor(N/K), extra = N%K;
-    let start = 0;
-    for(let i=1; i<tNum; i++) start += (i<=extra)?base+1:base;
-    return MASTER_LIST.slice(start, start + ((tNum<=extra)?base+1:base));
-}
-
-function setupTeacherDropdowns() {
-    const ts = document.getElementById('select-team'), qs = document.getElementById('select-task');
-    ts.innerHTML = ""; qs.innerHTML = "";
-    getTeacherAssignment(currentUserNum).forEach(id => ts.innerHTML += `<option value="${id}">${id}</option>`);
-    for(let i=1; i<=16; i++) qs.innerHTML += `<option value="${i}">Задача ${i}</option>`;
-}
-
-function startQueueListener() { 
-    db.ref('submissions').on('value', snap => { 
-        lastSubs = snap.val() || {}; 
-        updateQueue(); 
-    }); 
-}
-
-function updateQueue() {
-    const qBox = document.getElementById('answers-queue'); 
-    if(!qBox) return;
-    qBox.innerHTML = "";
-    
-    const mine = getTeacherAssignment(currentUserNum);
-    const items = Object.entries(lastSubs).map(([id, d]) => ({id, ...d})).filter(item => mine.includes(String(item.t)));
-    
-    const pending = [], checked = [];
-    items.forEach(item => {
-        const s = scores[`t${item.t.replace('.','-')}_q${item.q}`];
-        if(s) checked.unshift(item); else pending.unshift(item);
-    });
-
-    [...pending, ...checked].forEach(item => {
-        const s = scores[`t${item.t.replace('.','-')}_q${item.q}`];
-        let div = document.createElement('div');
-        div.className = `notif-card ${s?'checked':''}`;
-        div.innerHTML = `<div><b>${item.t} | Зад. ${item.q}</b><br><small>${s?'ПРОВЕРЕНО':'ЖДЕТ'}</small></div><b style="font-size:24px;">${item.a}</b>`;
-        div.onclick = () => { 
-            document.getElementById('select-team').value = item.t; 
-            document.getElementById('select-task').value = item.q; 
-            document.getElementById('view-ans').value = item.a; 
-            refreshStatusBanner(); 
-        };
-        qBox.appendChild(div);
-    });
-}
-
-function setResult(v) { 
-    const t = document.getElementById('select-team').value;
-    const q = document.getElementById('select-task').value;
-    if(t && q) {
-        db.ref(`scores/t${t.replace('.','-')}_q${q}`).set(v); 
-    }
-}
-
-function refreshStatusBanner() {
-    const t = document.getElementById('select-team')?.value;
-    const q = document.getElementById('select-task')?.value;
-    const b = document.getElementById('status-banner');
-    const aiBox = document.getElementById('ai-suggestion-box');
-    const aiVerdictText = document.getElementById('ai-verdict-text');
-    const aiReasonText = document.getElementById('ai-reason-text');
-
-    if(!t || !q) return;
-
-    const safeId = t.replace('.','-');
-    const s = scores[`t${safeId}_q${q}`];
-
-    if(b) {
-        if(s) { 
-            b.style.display = "block"; 
-            b.style.background = s === 'ok' ? 'var(--green)' : 'var(--red)'; 
-            b.innerText = s === 'ok' ? "ВЕРНО ✅" : "ОШИБКА ❌"; 
-        } else {
-            b.style.display = "none";
-        }
-    }
-
-    const aiData = aiChecks[`t${safeId}_q${q}`];
-    if(aiBox && aiData) {
-        aiBox.style.display = "block";
-        const isOk = aiData.aiVerdict === 'ok';
-        const confPercent = Math.round((aiData.confidence || 0) * 100);
+        const text = data.candidates[0].content.parts[0].text;
         
-        if(aiVerdictText) {
-            aiVerdictText.style.color = isOk ? "var(--green)" : "var(--red)";
-            aiVerdictText.innerText = `${isOk ? "ВЕРНО ✅" : "НЕВЕРНО ❌"} (${confPercent}% точности)`;
-        }
-        if(aiReasonText) {
-            aiReasonText.innerText = aiData.reason || "";
-        }
-    } else if(aiBox) {
-        aiBox.style.display = "none";
+        verdictEl.innerText = "Анализ завершён";
+        reasonEl.innerText = text;
+    } catch (e) {
+        verdictEl.innerText = "Ошибка ИИ";
+        reasonEl.innerText = "Не удалось связаться с сервисом проверки.";
     }
 }
 
-// ==========================================
-// 6. ПОДСЧЕТ БАЛЛОВ И ТАБЛИЦЫ
-// ==========================================
-function calcTotal(tid) {
-    let base = 0, solved = [];
-    const safeId = tid.replace('.','-');
-    for(let q=1; q<=16; q++) if(scores[`t${safeId}_q${q}`] === 'ok') { base += ((((q-1)%4)+1)*10); solved[q]=true; }
-    let bonus = 0;
-    for(let r=0; r<4; r++) if(solved[r*4+1] && solved[r*4+2] && solved[r*4+3] && solved[r*4+4]) bonus += 40;
-    for(let c=1; c<=4; c++) if(solved[c] && solved[c+4] && solved[c+8] && solved[c+12]) bonus += (c*10);
-    return base + bonus - (penalties[`t${safeId}`] || 0);
-}
+// Отрисовка таблиц (Табло)
+function renderTables() {
+    const container = document.getElementById("tables-container");
+    container.innerHTML = "";
 
-function renderTbl(title, list) {
-    let h = `<h3>${title}</h3><div class="table-holder"><table><tr><th>Команда</th>${Array.from({length:16},(_,i)=>`<th>${i+1}</th>`).join('')}<th>Σ</th></tr>`;
-    list.forEach(tid => {
-        let r = `<td><b>${tid}</b></td>`;
-        const safeId = tid.replace('.','-');
-        for(let q=1; q<=16; q++) { 
-            let s = scores[`t${safeId}_q${q}`]; 
-            r += `<td class="${s==='ok'?'bg-ok':(s==='fail'?'bg-fail':'')}"></td>`; 
-        }
-        h += `<tr>${r}<td><b>${calcTotal(tid)}</b></td></tr>`;
-    });
-    return h + `</table></div>`;
-}
+    const roomsToRender = currentRole === "room" ? [parseInt(currentRoom)] : [1, 2, 3, 4];
 
-function initHall() {
-    db.ref('scores').on('value', () => {
-        const c = document.getElementById('tables-container'); if(!c) return;
-        c.innerHTML = "";
-        [4, 5, 6, 7, 8].forEach(g => {
-            const l = MASTER_LIST.filter(t => t.startsWith(g+"."));
-            if(l.length) c.innerHTML += renderTbl(`Класс ${g}`, l);
+    roomsToRender.forEach(r => {
+        const holder = document.createElement("div");
+        holder.className = "table-holder";
+
+        let html = `<h3>Кабинет ${r}</h3><table><thead><tr><th>Команда</th>`;
+        for (let i = 1; i <= 16; i++) html += `<th>З${i}</th>`;
+        html += `<th>Штраф</th><th>Итого</th></tr></thead><tbody>`;
+
+        Object.keys(appState.teams).filter(t => appState.teams[t].room === r).forEach(tId => {
+            html += `<tr><td><strong>${tId}</strong></td>`;
+            let score = 0;
+
+            for (let task = 1; task <= 16; task++) {
+                const subKey = `${tId}_${task}`;
+                const sub = appState.submissions[subKey];
+                
+                if (sub && sub.status === "ok") {
+                    html += `<td class="bg-ok">10</td>`;
+                    score += 10;
+                } else if (sub && sub.status === "fail") {
+                    html += `<td class="bg-fail">0</td>`;
+                } else {
+                    html += `<td>-</td>`;
+                }
+            }
+
+            const penalty = appState.penalties[tId] || 0;
+            const total = score - penalty;
+
+            html += `<td>${penalty}</td><td><strong>${total}</strong></td></tr>`;
         });
+
+        html += `</tbody></table>`;
+        holder.innerHTML = html;
+        container.appendChild(holder);
     });
 }
 
-function initRoom(idx) {
-    db.ref('scores').on('value', () => {
-        const c = document.getElementById('tables-container'); if(!c) return;
-        c.innerHTML = renderTbl(`Комната ${idx}`, ROOMS[idx].teams);
+// Админка
+function saveAdminConfig() {
+    const val = parseInt(document.getElementById("setup-teachers").value);
+    db.ref("config/teacherCount").set(val).then(() => alert("Настройки сохранены!"));
+}
+
+function applyPenalty() {
+    const team = document.getElementById("penalty-team").value.trim();
+    const val = parseInt(document.getElementById("penalty-val").value) || 0;
+
+    if (!team) return alert("Укажите команду!");
+
+    db.ref(`penalties/${team}`).set(val).then(() => {
+        alert(`Штраф ${val} для команды ${team} применён!`);
+        document.getElementById("penalty-team").value = "";
+        document.getElementById("penalty-val").value = "";
     });
 }
 
 function showWinners() {
-    const c = document.getElementById('winners-container'); if(!c) return;
-    c.innerHTML = "";
-    document.getElementById('winners-screen').style.display = 'block';
-    [4, 5, 6, 7, 8].forEach(g => {
-        let l = MASTER_LIST.filter(t => t.startsWith(g+".")).map(tid => ({id: tid, s: calcTotal(tid)}));
-        l.sort((a,b) => b.s - a.s);
-        let h = `<div class="container"><h3>Класс ${g}</h3><div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">`;
-        ["🥇","🥈","🥉"].forEach((m,i) => { if(l[i]) h += `<div>${m} ${l[i].id}<br><b>${l[i].s}</b></div>`; });
-        c.innerHTML += h + "</div></div>";
+    const screen = document.getElementById("winners-screen");
+    const container = document.getElementById("winners-container");
+    screen.style.display = "block";
+
+    const scores = [];
+
+    Object.keys(appState.teams).forEach(tId => {
+        let total = 0;
+        for (let task = 1; task <= 16; task++) {
+            const sub = appState.submissions[`${tId}_${task}`];
+            if (sub && sub.status === "ok") total += 10;
+        }
+        total -= (appState.penalties[tId] || 0);
+        scores.push({ id: tId, score: total });
     });
+
+    scores.sort((a, b) => b.score - a.score);
+
+    let html = "<ol style='text-align: left; max-width: 400px; margin: 0 auto; font-size: 20px;'>";
+    scores.slice(0, 5).forEach(s => {
+        html += `<li style="margin-bottom: 10px;"><strong>Команда ${s.id}</strong>: ${s.score} баллов</li>`;
+    });
+    html += "</ol><button onclick='document.getElementById(\"winners-screen\").style.display=\"none\"' style='margin-top:30px;'>Закрыть</button>";
+
+    container.innerHTML = html;
 }
 
-// ==========================================
-// 7. АДМИН-ПАНЕЛЬ И ПОЛНЫЙ СБРОС (MASTER RESET)
-// ==========================================
-function applyPenalty() {
-    const t = document.getElementById('penalty-team').value;
-    const v = document.getElementById('penalty-val').value;
-    if(t && v) db.ref(`penalties/t${t.replace('.','-')}`).set(parseInt(v));
-}
-
-function saveAdminConfig() { 
-    db.ref('config/teachersCount').set(document.getElementById('setup-teachers').value); 
-    alert("Сохранено"); 
-}
-
-function fullReset() { 
-    const masterPass = prompt("ВНИМАНИЕ! Введите мастер-пароль для обнуления всех результатов:");
-    if(masterPass === "MASTER2026") {
-        if(confirm("ВЫ УВЕРЕНЫ? ДАННЫЕ БУДУТ УДАЛЕНЫ БЕЗВОЗВРАТНО!")) { 
-            db.ref('scores').remove(); 
-            db.ref('submissions').remove(); 
-            db.ref('penalties').remove(); 
-            db.ref('ai_checks').remove();
-
-            scores = {};
-            penalties = {};
-            aiChecks = {};
-            lastSubs = {};
-
-            if (typeof refreshStatusBanner === "function") refreshStatusBanner();
-            if (typeof updateQueue === "function") updateQueue();
-
-            alert("Все данные успешно обнулены!");
-        } 
-    } else {
-        alert("Неверный пароль!");
+function fullReset() {
+    if (confirm("Вы уверены? Это сбросит ВСЕ отправленные ответы и штрафы!")) {
+        db.ref("submissions").remove();
+        db.ref("penalties").remove().then(() => alert("База данных сброшена!"));
     }
 }
