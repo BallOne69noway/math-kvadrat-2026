@@ -9,12 +9,93 @@ let appState = {
     penalties: {}
 };
 
-// Инициализация при загрузке
+// Функция входа в систему
+function tryLogin() {
+    const loginInput = document.getElementById("login-field");
+    const passInput = document.getElementById("pass-field");
+
+    if (!loginInput || !passInput) {
+        alert("Ошибка: элементы формы входа не найдены!");
+        return;
+    }
+
+    const login = loginInput.value.trim().toLowerCase();
+    const pass = passInput.value.trim();
+
+    if (!login || !pass) {
+        alert("Заполните логин и пароль!");
+        return;
+    }
+
+    // Роли и пароли
+    if (login === "admin" && pass === "admin123") {
+        currentRole = "admin";
+        showScreen("admin-screen");
+    } else if (login.startsWith("vol") && pass === "vol123") {
+        currentRole = "volunteer";
+        currentUser = login;
+        showScreen("volunteer-screen");
+        updateVolunteerOptions();
+    } else if (login.startsWith("teacher") && pass === "teacher123") {
+        currentRole = "teacher";
+        currentUser = login;
+        showScreen("teacher-screen");
+        updateTeacherUI();
+    } else if (login.startsWith("room") && pass === "room123") {
+        currentRole = "room";
+        currentRoom = login.replace("room", "");
+        const title = document.getElementById("room-title");
+        if (title) title.innerText = `ТАБЛО — КАБИНЕТ ${currentRoom}`;
+        showScreen("room-screen");
+        renderTables();
+    } else if (login === "hall" && pass === "hall123") {
+        currentRole = "hall";
+        const title = document.getElementById("room-title");
+        if (title) title.innerText = "ОБЩЕЕ ТАБЛО ОЛИМПИАДЫ";
+        showScreen("room-screen");
+        renderTables();
+    } else {
+        alert("Неверный логин или пароль!");
+    }
+}
+
+// Переключение экранов
+function showScreen(screenId) {
+    document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
+    const winners = document.getElementById("winners-screen");
+    if (winners) winners.style.display = "none";
+    
+    const target = document.getElementById(screenId);
+    if (target) {
+        target.style.display = "block";
+    } else {
+        console.error("Экран не найден:", screenId);
+    }
+}
+
+// Генерация дефолтных команд (1.1 - 4.8)
+function generateDefaultTeams() {
+    const teams = {};
+    for (let r = 1; r <= 4; r++) {
+        for (let t = 1; t <= 8; t++) {
+            const teamId = `${r}.${t}`;
+            teams[teamId] = { room: r, name: `Команда ${teamId}` };
+        }
+    }
+    return teams;
+}
+
+// Инициализация при загрузке страницы
 document.addEventListener("DOMContentLoaded", () => {
     initApp();
 });
 
 function initApp() {
+    if (typeof db === "undefined") {
+        console.error("Firebase DB не инициализирована в config.js!");
+        return;
+    }
+
     db.ref().on("value", (snapshot) => {
         const data = snapshot.val() || {};
         appState.teams = data.teams || generateDefaultTeams();
@@ -33,88 +114,44 @@ function initApp() {
     });
 }
 
-function showScreen(screenId) {
-    document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
-    document.getElementById("winners-screen").style.display = "none";
-    const target = document.getElementById(screenId);
-    if (target) target.style.display = "block";
-}
-
-// Авторизация
-function tryLogin() {
-    const login = document.getElementById("login-field").value.trim().toLowerCase();
-    const pass = document.getElementById("pass-field").value.trim();
-
-    if (login === "admin" && pass === "admin123") {
-        currentRole = "admin";
-        showScreen("admin-screen");
-    } else if (login.startsWith("vol") && pass === "vol123") {
-        currentRole = "volunteer";
-        currentUser = login;
-        showScreen("volunteer-screen");
-        updateVolunteerOptions();
-    } else if (login.startsWith("teacher") && pass === "teacher123") {
-        currentRole = "teacher";
-        currentUser = login;
-        showScreen("teacher-screen");
-        updateTeacherUI();
-    } else if (login.startsWith("room") && pass === "room123") {
-        currentRole = "room";
-        currentRoom = login.replace("room", "");
-        document.getElementById("room-title").innerText = `ТАБЛО — КАБИНЕТ ${currentRoom}`;
-        showScreen("room-screen");
-        renderTables();
-    } else if (login === "hall" && pass === "hall123") {
-        currentRole = "hall";
-        document.getElementById("room-title").innerText = "ОБЩЕЕ ТАБЛО ОЛИМПИАДЫ";
-        showScreen("room-screen");
-        renderTables();
-    } else {
-        alert("Неверный логин или пароль!");
-    }
-}
-
-// Дефолтные команды (4 кабинета, по 8 команд)
-function generateDefaultTeams() {
-    const teams = {};
-    for (let r = 1; r <= 4; r++) {
-        for (let t = 1; t <= 8; t++) {
-            const teamId = `${r}.${t}`;
-            teams[teamId] = { room: r, name: `Команда ${teamId}` };
-        }
-    }
-    return teams;
-}
-
-// Опции для волонтёра
+// Настройки волонтёра
 function updateVolunteerOptions() {
     const teamSelect = document.getElementById("vol-select-team");
     const taskSelect = document.getElementById("vol-select-task");
-    
-    if (teamSelect.options.length === 0) {
-        Object.keys(appState.teams).forEach(id => {
-            const opt = document.createElement("option");
-            opt.value = id;
-            opt.innerText = `Команда ${id}`;
-            teamSelect.appendChild(opt);
-        });
-    }
 
-    if (taskSelect.options.length === 0) {
-        for (let i = 1; i <= 16; i++) {
-            const opt = document.createElement("option");
-            opt.value = i;
-            opt.innerText = `Задача ${i}`;
-            taskSelect.appendChild(opt);
-        }
+    if (!teamSelect || !taskSelect) return;
+
+    teamSelect.innerHTML = "";
+    taskSelect.innerHTML = "";
+
+    const teams = (appState.teams && Object.keys(appState.teams).length > 0) ? appState.teams : generateDefaultTeams();
+
+    Object.keys(teams).forEach(id => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.innerText = `Команда ${id}`;
+        teamSelect.appendChild(opt);
+    });
+
+    for (let i = 1; i <= 16; i++) {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.innerText = `Задача ${i}`;
+        taskSelect.appendChild(opt);
     }
 }
 
-// Отправка ответа волонтёром
+// Отправка решения волонтёром
 function sendSubmission() {
-    const team = document.getElementById("vol-select-team").value;
-    const task = document.getElementById("vol-select-task").value;
-    const ans = document.getElementById("vol-ans").value.trim();
+    const teamEl = document.getElementById("vol-select-team");
+    const taskEl = document.getElementById("vol-select-task");
+    const ansEl = document.getElementById("vol-ans");
+
+    if (!teamEl || !taskEl || !ansEl) return;
+
+    const team = teamEl.value;
+    const task = taskEl.value;
+    const ans = ansEl.value.trim();
 
     if (!ans) return alert("Введите ответ!");
 
@@ -126,32 +163,35 @@ function sendSubmission() {
         status: "pending",
         timestamp: Date.now()
     }).then(() => {
-        document.getElementById("vol-ans").value = "";
+        ansEl.value = "";
         alert("Ответ отправлен жюри!");
     });
 }
 
-// Интерфейс жюри
+// Настройки интерфейса учителя
 function updateTeacherUI() {
     const teamSelect = document.getElementById("select-team");
     const taskSelect = document.getElementById("select-task");
 
-    if (teamSelect.options.length === 0) {
-        Object.keys(appState.teams).forEach(id => {
-            const opt = document.createElement("option");
-            opt.value = id;
-            opt.innerText = `Команда ${id}`;
-            teamSelect.appendChild(opt);
-        });
-    }
+    if (!teamSelect || !taskSelect) return;
 
-    if (taskSelect.options.length === 0) {
-        for (let i = 1; i <= 16; i++) {
-            const opt = document.createElement("option");
-            opt.value = i;
-            opt.innerText = `Задача ${i}`;
-            taskSelect.appendChild(opt);
-        }
+    teamSelect.innerHTML = "";
+    taskSelect.innerHTML = "";
+
+    const teams = (appState.teams && Object.keys(appState.teams).length > 0) ? appState.teams : generateDefaultTeams();
+
+    Object.keys(teams).forEach(id => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.innerText = `Команда ${id}`;
+        teamSelect.appendChild(opt);
+    });
+
+    for (let i = 1; i <= 16; i++) {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.innerText = `Задача ${i}`;
+        taskSelect.appendChild(opt);
     }
 
     renderQueue();
@@ -161,8 +201,9 @@ function updateTeacherUI() {
 // Очередь ответов
 function renderQueue() {
     const container = document.getElementById("answers-queue");
-    container.innerHTML = "";
+    if (!container) return;
 
+    container.innerHTML = "";
     const list = Object.values(appState.submissions).sort((a, b) => b.timestamp - a.timestamp);
 
     list.forEach(sub => {
@@ -181,18 +222,27 @@ function renderQueue() {
 }
 
 function selectSubmissionForCheck(sub) {
-    document.getElementById("select-team").value = sub.team;
-    document.getElementById("select-task").value = sub.task;
-    document.getElementById("view-ans").value = sub.answer;
+    const teamSelect = document.getElementById("select-team");
+    const taskSelect = document.getElementById("select-task");
+    const viewAns = document.getElementById("view-ans");
+
+    if (teamSelect) teamSelect.value = sub.team;
+    if (taskSelect) taskSelect.value = sub.task;
+    if (viewAns) viewAns.value = sub.answer;
+
     refreshStatusBanner();
     checkWithAI(sub.task, sub.answer);
 }
 
 function refreshStatusBanner() {
-    const team = document.getElementById("select-team").value;
-    const task = document.getElementById("select-task").value;
+    const teamSelect = document.getElementById("select-team");
+    const taskSelect = document.getElementById("select-task");
     const banner = document.getElementById("status-banner");
-    
+
+    if (!teamSelect || !taskSelect || !banner) return;
+
+    const team = teamSelect.value;
+    const task = taskSelect.value;
     const subKey = `${team}_${task}`;
     const sub = appState.submissions[subKey];
 
@@ -210,11 +260,17 @@ function refreshStatusBanner() {
     }
 }
 
-// Вердикт жюри
+// Установка вердикта жюри
 function setResult(status) {
-    const team = document.getElementById("select-team").value;
-    const task = document.getElementById("select-task").value;
-    const ans = document.getElementById("view-ans").value;
+    const teamSelect = document.getElementById("select-team");
+    const taskSelect = document.getElementById("select-task");
+    const viewAns = document.getElementById("view-ans");
+
+    if (!teamSelect || !taskSelect) return;
+
+    const team = teamSelect.value;
+    const task = taskSelect.value;
+    const ans = viewAns ? viewAns.value : "—";
 
     const subKey = `${team}_${task}`;
     db.ref(`submissions/${subKey}`).set({
@@ -226,11 +282,13 @@ function setResult(status) {
     });
 }
 
-// Интеграция с Gemini API
+// Проверка через Gemini ИИ
 async function checkWithAI(taskNum, userAns) {
     const box = document.getElementById("ai-suggestion-box");
     const verdictEl = document.getElementById("ai-verdict-text");
     const reasonEl = document.getElementById("ai-reason-text");
+
+    if (!box || !verdictEl || !reasonEl) return;
 
     box.style.display = "block";
     verdictEl.innerText = "Анализируем ответ с Gemini AI...";
@@ -260,12 +318,14 @@ async function checkWithAI(taskNum, userAns) {
     }
 }
 
-// Отрисовка таблиц (Табло)
+// Отрисовка таблиц на табло
 function renderTables() {
     const container = document.getElementById("tables-container");
-    container.innerHTML = "";
+    if (!container) return;
 
+    container.innerHTML = "";
     const roomsToRender = currentRole === "room" ? [parseInt(currentRoom)] : [1, 2, 3, 4];
+    const teams = (appState.teams && Object.keys(appState.teams).length > 0) ? appState.teams : generateDefaultTeams();
 
     roomsToRender.forEach(r => {
         const holder = document.createElement("div");
@@ -275,7 +335,9 @@ function renderTables() {
         for (let i = 1; i <= 16; i++) html += `<th>З${i}</th>`;
         html += `<th>Штраф</th><th>Итого</th></tr></thead><tbody>`;
 
-        Object.keys(appState.teams).filter(t => appState.teams[t].room === r).forEach(tId => {
+        const roomTeams = Object.keys(teams).filter(t => teams[t].room === r);
+
+        roomTeams.forEach(tId => {
             html += `<tr><td><strong>${tId}</strong></td>`;
             let score = 0;
 
@@ -305,33 +367,42 @@ function renderTables() {
     });
 }
 
-// Админка
+// Функции администратора
 function saveAdminConfig() {
-    const val = parseInt(document.getElementById("setup-teachers").value);
+    const input = document.getElementById("setup-teachers");
+    if (!input) return;
+    const val = parseInt(input.value);
     db.ref("config/teacherCount").set(val).then(() => alert("Настройки сохранены!"));
 }
 
 function applyPenalty() {
-    const team = document.getElementById("penalty-team").value.trim();
-    const val = parseInt(document.getElementById("penalty-val").value) || 0;
+    const teamEl = document.getElementById("penalty-team");
+    const valEl = document.getElementById("penalty-val");
+
+    if (!teamEl || !valEl) return;
+
+    const team = teamEl.value.trim();
+    const val = parseInt(valEl.value) || 0;
 
     if (!team) return alert("Укажите команду!");
 
     db.ref(`penalties/${team}`).set(val).then(() => {
         alert(`Штраф ${val} для команды ${team} применён!`);
-        document.getElementById("penalty-team").value = "";
-        document.getElementById("penalty-val").value = "";
+        teamEl.value = "";
+        valEl.value = "";
     });
 }
 
 function showWinners() {
     const screen = document.getElementById("winners-screen");
     const container = document.getElementById("winners-container");
+    if (!screen || !container) return;
+
     screen.style.display = "block";
-
     const scores = [];
+    const teams = (appState.teams && Object.keys(appState.teams).length > 0) ? appState.teams : generateDefaultTeams();
 
-    Object.keys(appState.teams).forEach(tId => {
+    Object.keys(teams).forEach(tId => {
         let total = 0;
         for (let task = 1; task <= 16; task++) {
             const sub = appState.submissions[`${tId}_${task}`];

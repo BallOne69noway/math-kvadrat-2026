@@ -10,7 +10,9 @@ const firebaseConfig = {
 };
 
 // Инициализация Firebase
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.database();
 
 // Ключ Gemini API
